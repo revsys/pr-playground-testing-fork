@@ -52,4 +52,4 @@ jobs:
           #   "Ready for Checkin" — approved, awaiting merger
           # ----------------------------------------------------------------
           ACCEPTABLE_STAGES: "Needs Patch,Needs PR Review,Waiting on Author"
-        run: python .github/workflows/pr-processing/check_pr.py
+        run: uv run python .github/workflows/pr-processing/check_pr.py
