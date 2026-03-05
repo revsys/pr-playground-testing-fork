@@ -118,7 +118,7 @@ def check_trac_ticket(pr_body: str, pr_files: list[str]) -> str | None:
 
     # Look for the ticket reference inside the Trac ticket number section.
     section_match = re.search(
-        r"#### Trac ticket number[^\n]*\n(.*?)(?=\n####|\Z)", pr_body, re.DOTALL
+        r"#### Trac ticket number[^\n]*\n(.*?)(?=\r?\n####|\Z)", pr_body, re.DOTALL
     )
     section = section_match.group(1) if section_match else pr_body
 
@@ -189,7 +189,9 @@ def check_branch_description(pr_body: str) -> str | None:
         "Provide a concise overview of the issue or rationale behind the proposed changes."
     )
 
-    match = re.search(r"#### Branch description[ \t]*\n(.*?)(?=\n####|\Z)", pr_body, re.DOTALL)
+    match = re.search(
+        r"#### Branch description[ \t]*\r?\n(.*?)(?=\r?\n####|\Z)", pr_body, re.DOTALL
+    )
     if not match:
         return load_message("missing_description.txt")
 
@@ -209,7 +211,7 @@ def check_ai_disclosure(pr_body: str) -> str | None:
     additional description must be present in that section.
     """
     match = re.search(
-        r"#### AI Assistance Disclosure[^\n]*\n(.*?)(?=\n####|\Z)", pr_body, re.DOTALL
+        r"#### AI Assistance Disclosure[^\n]*\n(.*?)(?=\r?\n####|\Z)", pr_body, re.DOTALL
     )
     if not match:
         return load_message("missing_ai_disclosure.txt")
@@ -243,7 +245,7 @@ def check_checklist(pr_body: str) -> str | None:
     """
     Check 5: The first five items in the Checklist section must be checked.
     """
-    match = re.search(r"#### Checklist[ \t]*\n(.*?)(?=\n####|\Z)", pr_body, re.DOTALL)
+    match = re.search(r"#### Checklist[ \t]*\r?\n(.*?)(?=\r?\n####|\Z)", pr_body, re.DOTALL)
     if not match:
         return load_message("incomplete_checklist.txt")
 

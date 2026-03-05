@@ -493,6 +493,94 @@ def test_integration_unedited_template_fails_all_checks():
         assert result is not None, f"Check {i} should have failed on raw template"
 
 
+# ── PR #5 regression fixture ──────────────────────────────────────────────────
+# This is the exact body from https://github.com/frankwiles/pr-playground/pull/5
+# The PR was incorrectly flagged for missing branch description and incomplete
+# checklist even though both were properly filled in. Root cause: GitHub delivers
+# PR bodies with \r\n line endings, which the [ \t]*\n section-header regexes
+# did not handle.
+
+PR5_BODY = (
+    "#### Trac ticket number\r\n"
+    "<!-- Replace XXXXX with the corresponding Trac ticket number."
+    " All PRs must have a Trac ticket or be only docs changes -->\r\n"
+    "\r\n"
+    "ticket-37000\r\n"
+    "\r\n"
+    "#### Branch description\r\n"
+    "\r\n"
+    "This is a testing PR, but the Trac ticket doesn't exist so this should error. \r\n"
+    "\r\n"
+    "#### AI Assistance Disclosure (REQUIRED)\r\n"
+    "<!-- Please select exactly ONE of the following: -->\r\n"
+    "- [x] **No AI tools were used** in preparing this PR.\r\n"
+    "- [ ] **If AI tools were used**, I have disclosed which ones,"
+    " and fully reviewed and verified their output.\r\n"
+    "\r\n"
+    "#### Checklist\r\n"
+    "- [x] This PR follows the [contribution guidelines]"
+    "(https://docs.djangoproject.com/en/stable/internals/contributing/writing-code/submitting-patches/).\r\n"
+    "- [x] This PR **does not** disclose a security vulnerability"
+    " (see [vulnerability reporting](https://docs.djangoproject.com/en/stable/internals/security/)).\r\n"
+    "- [x] This PR targets the `main` branch."
+    " <!-- Backports will be evaluated and done by mergers, when necessary. -->\r\n"
+    "- [x] The commit message is written in past tense, mentions the ticket number, and ends with a period.\r\n"
+    '- [x] I have checked the "Has patch" ticket flag in the Trac system.\r\n'
+    "- [ ] I have added or updated relevant tests.\r\n"
+    "- [ ] I have added or updated relevant docs, including release notes if applicable.\r\n"
+    "- [ ] I have attached screenshots in both light and dark modes for any UI changes.\r\n"
+)
+
+
+def test_pr5_branch_description_passes():
+    """PR #5 has a valid branch description; must not be flagged as missing."""
+    assert check_pr.check_branch_description(PR5_BODY) is None
+
+
+def test_pr5_checklist_passes():
+    """PR #5 has all 5 required checklist items checked; must not be flagged as incomplete."""
+    assert check_pr.check_checklist(PR5_BODY) is None
+
+
+def test_pr5_ai_disclosure_passes():
+    """PR #5 correctly selects 'No AI tools were used'."""
+    assert check_pr.check_ai_disclosure(PR5_BODY) is None
+
+
+def test_pr5_trac_status_fails_for_missing_ticket():
+    """PR #5 references ticket-37000 which does not exist; trac status check must fail."""
+    with patch("httpx.get", side_effect=make_http_status_error(404)):
+        assert check_pr.check_trac_status(PR5_BODY, ACCEPTABLE_STAGES) is not None
+
+
+def test_crlf_branch_description_passes():
+    """Section-header regex must handle \\r\\n line endings from GitHub's API."""
+    body = make_pr_body().replace("\n", "\r\n")
+    assert check_pr.check_branch_description(body) is None
+
+
+def test_crlf_checklist_passes():
+    """Checklist regex must handle \\r\\n line endings from GitHub's API."""
+    body = make_pr_body().replace("\n", "\r\n")
+    assert check_pr.check_checklist(body) is None
+
+
+def test_crlf_full_valid_pr_passes_all_checks():
+    """A fully valid PR body with \\r\\n line endings must pass every check."""
+    body = make_pr_body().replace("\n", "\r\n")
+    csv_text = make_trac_csv(stage="Accepted", has_patch="0")
+    with patch("httpx.get", mock_httpx_get(csv_text)):
+        results = [
+            check_pr.check_trac_ticket(body, NON_DOCS_FILES),
+            check_pr.check_trac_status(body, ACCEPTABLE_STAGES),
+            check_pr.check_branch_description(body),
+            check_pr.check_ai_disclosure(body),
+            check_pr.check_checklist(body),
+        ]
+    failures = [r for r in results if r is not None]
+    assert failures == [], "Expected no failures with CRLF body, got:\n" + "\n---\n".join(failures)
+
+
 def test_integration_docs_only_pr_skips_all_checks(monkeypatch, capsys):
     """A docs-only PR should pass without running any checks, even with an empty body."""
     monkeypatch.setattr(check_pr, "PR_NUMBER", "42")
