@@ -289,6 +289,35 @@ def check_checklist(pr_body: str) -> str | None:
     return None
 
 
+# ── Job summary ───────────────────────────────────────────────────────────────
+
+SKIPPED = object()  # sentinel: check was not run due to a prior failure
+
+
+def write_job_summary(pr_number: str, results: list[tuple[str, str | None | object]]) -> None:
+    """Write a Markdown job summary to $GITHUB_STEP_SUMMARY (if available)."""
+    summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_file:
+        return
+
+    lines = [
+        f"## PR #{pr_number} Quality Check Results\n",
+        "| | Check | Result |",
+        "| --- | --- | --- |",
+    ]
+    for name, result in results:
+        if result is SKIPPED:
+            icon, status = "⏭️", "Skipped"
+        elif result is None:
+            icon, status = "✅", "Passed"
+        else:
+            icon, status = "❌", "Failed"
+        lines.append(f"| {icon} | {name} | {status} |")
+
+    with open(summary_file, "a") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -298,6 +327,11 @@ def main() -> None:
     # Docs-only PRs are exempt from all quality checks.
     if pr_files and all(f.startswith("docs/") for f in pr_files):
         print(f"✓ PR #{PR_NUMBER} only touches docs/ — skipping all checks.")
+        summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary_file:
+            with open(summary_file, "a") as f:
+                f.write(f"## PR #{PR_NUMBER} Quality Check Results\n\n")
+                f.write("> ℹ️ Docs-only PR — all quality checks skipped.\n")
         return
 
     # Rewrite bare ticket references to Markdown links.
@@ -308,16 +342,26 @@ def main() -> None:
         github_request("PATCH", f"/pulls/{PR_NUMBER}", {"body": rewritten})
         pr_body = rewritten
 
-    checks = [
-        lambda: check_trac_ticket(pr_body, pr_files),
-        lambda: check_trac_status(pr_body),
-        lambda: check_trac_has_patch(pr_body),
-        lambda: check_branch_description(pr_body),
-        lambda: check_ai_disclosure(pr_body),
-        lambda: check_checklist(pr_body),
-    ]
+    ticket_result = check_trac_ticket(pr_body, pr_files)
+    if ticket_result is None:
+        status_result = check_trac_status(pr_body)
+        has_patch_result = check_trac_has_patch(pr_body)
+    else:
+        print("No Trac ticket — skipping status and has_patch checks.")
+        status_result = SKIPPED
+        has_patch_result = SKIPPED
 
-    failures = [result for check in checks if (result := check()) is not None]
+    results = [
+        ("Trac ticket referenced", ticket_result),
+        ("Trac ticket status is Accepted", status_result),
+        ("Trac ticket has_patch flag set", has_patch_result),
+        ("Branch description provided", check_branch_description(pr_body)),
+        ("AI disclosure completed", check_ai_disclosure(pr_body)),
+        ("Checklist completed", check_checklist(pr_body)),
+    ]
+    write_job_summary(PR_NUMBER, results)
+
+    failures = [msg for _, msg in results if msg is not None and msg is not SKIPPED]
 
     if not failures:
         print(f"✓ PR #{PR_NUMBER} passed all quality checks.")

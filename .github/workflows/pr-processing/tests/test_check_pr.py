@@ -611,3 +611,136 @@ def test_integration_docs_only_pr_skips_all_checks(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "docs/" in captured.out
     assert "skipping" in captured.out.lower()
+
+
+# ── write_job_summary ─────────────────────────────────────────────────────────
+
+
+def test_write_job_summary_no_env_var_does_nothing(tmp_path, monkeypatch):
+    """When GITHUB_STEP_SUMMARY is not set, write_job_summary does nothing."""
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    # Should not raise and should not create any files.
+    check_pr.write_job_summary("99", [("Some check", None), ("Other check", "failure msg")])
+
+
+def test_write_job_summary_all_passed(tmp_path, monkeypatch):
+    """All-pass results produce a table with only ✅ rows."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+
+    results = [
+        ("Trac ticket referenced", None),
+        ("Branch description provided", None),
+    ]
+    check_pr.write_job_summary("7", results)
+
+    content = summary.read_text()
+    assert "## PR #7 Quality Check Results" in content
+    assert "✅" in content
+    assert "❌" not in content
+    assert "Trac ticket referenced" in content
+    assert "Branch description provided" in content
+
+
+def test_write_job_summary_with_failures(tmp_path, monkeypatch):
+    """Failed checks show ❌ and passed checks show ✅."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+
+    results = [
+        ("Trac ticket referenced", None),
+        ("Branch description provided", "Missing description"),
+        ("Checklist completed", "Incomplete checklist"),
+    ]
+    check_pr.write_job_summary("12", results)
+
+    content = summary.read_text()
+    assert "## PR #12 Quality Check Results" in content
+    assert content.count("✅") == 1
+    assert content.count("❌") == 2
+    assert "Passed" in content
+    assert "Failed" in content
+
+
+def test_write_job_summary_appends_to_existing_file(tmp_path, monkeypatch):
+    """write_job_summary appends to an existing file rather than overwriting it."""
+    summary = tmp_path / "summary.md"
+    summary.write_text("## Previous step\n\nSome content.\n")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+
+    check_pr.write_job_summary("5", [("Checklist completed", None)])
+
+    content = summary.read_text()
+    assert "## Previous step" in content
+    assert "## PR #5 Quality Check Results" in content
+
+
+def test_write_job_summary_skipped_checks(tmp_path, monkeypatch):
+    """Skipped checks show ⏭️ and 'Skipped' in the summary."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+
+    results = [
+        ("Trac ticket referenced", "No ticket found"),
+        ("Trac ticket status is Accepted", check_pr.SKIPPED),
+        ("Trac ticket has_patch flag set", check_pr.SKIPPED),
+    ]
+    check_pr.write_job_summary("3", results)
+
+    content = summary.read_text()
+    assert content.count("⏭️") == 2
+    assert content.count("Skipped") == 2
+    assert "❌" in content
+
+
+def test_no_ticket_skips_trac_status_and_has_patch(monkeypatch, capsys):
+    """When check_trac_ticket fails, status and has_patch are skipped (not run)."""
+    monkeypatch.setattr(check_pr, "PR_NUMBER", "10")
+    monkeypatch.setattr(check_pr, "PR_BODY", "")
+    monkeypatch.setattr(check_pr, "get_pr_files", lambda: NON_DOCS_FILES)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+
+    # If status or has_patch were called they'd hit the network — patch them to
+    # fail loudly so the test catches any accidental call.
+    monkeypatch.setattr(
+        check_pr,
+        "check_trac_status",
+        MagicMock(side_effect=AssertionError("check_trac_status should not be called")),
+    )
+    monkeypatch.setattr(
+        check_pr,
+        "check_trac_has_patch",
+        MagicMock(side_effect=AssertionError("check_trac_has_patch should not be called")),
+    )
+    monkeypatch.setattr(check_pr, "github_request", MagicMock())
+
+    check_pr.main()
+
+    captured = capsys.readouterr()
+    assert "skipping" in captured.out.lower()
+
+
+def test_no_ticket_results_include_skipped_sentinels(monkeypatch):
+    """SKIPPED sentinel appears in results for status and has_patch when ticket is missing."""
+    body = make_pr_body(ticket="")  # no ticket
+    monkeypatch.setattr(check_pr, "PR_NUMBER", "10")
+    monkeypatch.setattr(check_pr, "PR_BODY", body)
+    monkeypatch.setattr(check_pr, "get_pr_files", lambda: NON_DOCS_FILES)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+
+    captured_results = []
+
+    original_write = check_pr.write_job_summary
+
+    def capture_results(pr_number, results):
+        captured_results.extend(results)
+        original_write(pr_number, results)
+
+    monkeypatch.setattr(check_pr, "write_job_summary", capture_results)
+    monkeypatch.setattr(check_pr, "github_request", MagicMock())
+
+    check_pr.main()
+
+    result_map = dict(captured_results)
+    assert result_map["Trac ticket status is Accepted"] is check_pr.SKIPPED
+    assert result_map["Trac ticket has_patch flag set"] is check_pr.SKIPPED
