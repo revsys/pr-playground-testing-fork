@@ -104,6 +104,24 @@ def compute_trac_stage(row: dict) -> str:
     return "Needs PR Review"
 
 
+# ── Body rewriting ────────────────────────────────────────────────────────────
+
+
+def rewrite_ticket_links(pr_body: str) -> str:
+    """
+    Replace bare ticket-XXXXXX references with Markdown links.
+
+    Already-linked references (e.g. [ticket-123](...)) are left untouched via
+    a negative lookbehind that skips matches preceded by '['.
+    """
+    return re.sub(
+        r"(?<!\[)\bticket-(\d+)\b",
+        r"[ticket-\1](https://code.djangoproject.com/ticket/\1)",
+        pr_body,
+        flags=re.IGNORECASE,
+    )
+
+
 # ── Checks ────────────────────────────────────────────────────────────────────
 
 
@@ -268,12 +286,20 @@ def main() -> None:
         print(f"✓ PR #{PR_NUMBER} only touches docs/ — skipping all checks.")
         return
 
+    # Rewrite bare ticket references to Markdown links.
+    pr_body = PR_BODY
+    rewritten = rewrite_ticket_links(pr_body)
+    if rewritten != pr_body:
+        print(f"Updating PR #{PR_NUMBER} body to linkify ticket references.")
+        github_request("PATCH", f"/pulls/{PR_NUMBER}", {"body": rewritten})
+        pr_body = rewritten
+
     checks = [
-        lambda: check_trac_ticket(PR_BODY, pr_files),
-        lambda: check_trac_status(PR_BODY, ACCEPTABLE_STAGES),
-        lambda: check_branch_description(PR_BODY),
-        lambda: check_ai_disclosure(PR_BODY),
-        lambda: check_checklist(PR_BODY),
+        lambda: check_trac_ticket(pr_body, pr_files),
+        lambda: check_trac_status(pr_body, ACCEPTABLE_STAGES),
+        lambda: check_branch_description(pr_body),
+        lambda: check_ai_disclosure(pr_body),
+        lambda: check_checklist(pr_body),
     ]
 
     failures = [result for check in checks if (result := check()) is not None]

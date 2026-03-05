@@ -106,6 +106,43 @@ def make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
     return httpx.HTTPStatusError("error", request=request, response=response)
 
 
+# ── rewrite_ticket_links ──────────────────────────────────────────────────────
+
+
+def test_rewrite_ticket_links_plain_reference():
+    result = check_pr.rewrite_ticket_links("See ticket-12345 for details.")
+    assert result == "See [ticket-12345](https://code.djangoproject.com/ticket/12345) for details."
+
+
+def test_rewrite_ticket_links_already_linked_unchanged():
+    body = "See [ticket-12345](https://code.djangoproject.com/ticket/12345) for details."
+    assert check_pr.rewrite_ticket_links(body) == body
+
+
+def test_rewrite_ticket_links_multiple_references():
+    body = "Fixes ticket-100 and ticket-200."
+    result = check_pr.rewrite_ticket_links(body)
+    assert "[ticket-100](https://code.djangoproject.com/ticket/100)" in result
+    assert "[ticket-200](https://code.djangoproject.com/ticket/200)" in result
+
+
+def test_rewrite_ticket_links_case_insensitive():
+    result = check_pr.rewrite_ticket_links("See TICKET-99 for details.")
+    assert "https://code.djangoproject.com/ticket/99" in result
+
+
+def test_rewrite_ticket_links_no_ticket_unchanged():
+    body = "No ticket references here."
+    assert check_pr.rewrite_ticket_links(body) == body
+
+
+def test_rewrite_ticket_links_mixed_linked_and_plain():
+    body = "Already [ticket-1](https://code.djangoproject.com/ticket/1) and plain ticket-2."
+    result = check_pr.rewrite_ticket_links(body)
+    assert result.count("ticket-1") == 1  # not double-linked
+    assert "[ticket-2](https://code.djangoproject.com/ticket/2)" in result
+
+
 # ── Check 1: Trac ticket presence ─────────────────────────────────────────────
 
 
