@@ -12,6 +12,10 @@ on:
       - synchronize
       - reopened
 
+concurrency:
+  group: pr-quality-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   pull-requests: write
   issues: write
