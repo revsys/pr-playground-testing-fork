@@ -12,4 +12,6 @@ ready to merge this into the Django repo itself.
 
 # Authors
 
-Frank Wiles <frank@revsys.com>
+Frank Wiles <frank@revsys.com> 
+
+THIS SHOULD NOT BE OK
