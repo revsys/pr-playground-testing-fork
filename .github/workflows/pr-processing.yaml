@@ -26,12 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout base branch (never the PR head)
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
+          persist-credentials: false
           ref: ${{ github.event.repository.default_branch }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
 
@@ -44,13 +45,4 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          # ----------------------------------------------------------------
-          # Configurable: comma-separated list of acceptable Trac ticket
-          # stage names. Valid values (derived from Trac CSV fields):
-          #   "Needs Patch"      — accepted ticket, no patch submitted yet
-          #   "Needs PR Review"  — patch exists, awaiting community review
-          #   "Waiting on Author" — patch needs fixes from the author
-          #   "Ready for Checkin" — approved, awaiting merger
-          # ----------------------------------------------------------------
-          ACCEPTABLE_STAGES: "Needs Patch,Needs PR Review,Waiting on Author"
         run: python .github/workflows/pr-processing/check_pr.py
