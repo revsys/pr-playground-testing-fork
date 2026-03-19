@@ -6,7 +6,7 @@ This PR does not include a valid Trac ticket reference. All PRs that modify file
 
 1. Visit https://code.djangoproject.com/ and find or file the appropriate ticket for your change.
 2. Wait for the ticket to be triaged and accepted before submitting a PR. Patches submitted against unreviewed tickets are unlikely to be merged.
-3. Edit the **Trac ticket number** section of your PR description to include the ticket in the format `ticket-NNNNN` (e.g. `ticket-36969`).
+3. Edit the **Trac ticket number** section of your PR description to include the ticket in the format `ticket-NNNNN` (e.g. `ticket-36991`).
 
 If your PR only changes files inside the `docs/` folder, no ticket is required.
 

@@ -21,7 +21,7 @@ MIXED_FILES = ["django/template/base.py", "docs/topics/templates.txt"]
 
 
 def make_pr_body(
-    ticket="ticket-36969",
+    ticket="ticket-36991",
     description="Fix regression in template rendering where nested blocks were incorrectly evaluated.",
     no_ai_checked=True,
     ai_used_checked=False,
@@ -76,7 +76,7 @@ VALID_PR_BODY = make_pr_body()
 
 
 def make_trac_csv(
-    ticket_id="36969",
+    ticket_id="36991",
     stage="Accepted",
     has_patch="0",
     needs_docs="0",
@@ -202,14 +202,14 @@ def test_trac_status_no_ticket_skips_check():
 def test_trac_status_accepted_passes():
     csv_text = make_trac_csv(stage="Accepted", has_patch="0")
     with patch("httpx.get", mock_httpx_get(csv_text)):
-        assert check_pr.check_trac_status("ticket-36969") is None
+        assert check_pr.check_trac_status("ticket-36991") is None
 
 
 @pytest.mark.parametrize("stage", ["Unreviewed", "Ready for Checkin", "Someday/Maybe"])
 def test_trac_status_non_accepted_stages_fail(stage):
     csv_text = make_trac_csv(stage=stage, has_patch="0")
     with patch("httpx.get", mock_httpx_get(csv_text)):
-        assert check_pr.check_trac_status("ticket-36969") is not None
+        assert check_pr.check_trac_status("ticket-36991") is not None
 
 
 def test_trac_status_failure_message_contains_ticket_id():
@@ -222,7 +222,7 @@ def test_trac_status_failure_message_contains_ticket_id():
 def test_trac_status_failure_message_contains_current_stage():
     csv_text = make_trac_csv(stage="Unreviewed", has_patch="0")
     with patch("httpx.get", mock_httpx_get(csv_text)):
-        result = check_pr.check_trac_status("ticket-36969")
+        result = check_pr.check_trac_status("ticket-36991")
     assert "Unreviewed" in result
 
 
@@ -235,13 +235,13 @@ def test_trac_status_http_404_fails():
 def test_trac_status_network_error_skips_check():
     """A transient network error should not close valid PRs."""
     with patch("httpx.get", side_effect=OSError("Connection refused")):
-        assert check_pr.check_trac_status("ticket-36969") is None
+        assert check_pr.check_trac_status("ticket-36991") is None
 
 
 def test_trac_status_http_500_skips_check():
     """Trac server errors are treated as transient — skip the check."""
     with patch("httpx.get", side_effect=make_http_status_error(500)):
-        assert check_pr.check_trac_status("ticket-36969") is None
+        assert check_pr.check_trac_status("ticket-36991") is None
 
 
 # ── Check 3: has_patch flag ────────────────────────────────────────────────────
@@ -270,11 +270,11 @@ def test_has_patch_not_set_times_out_fails(monkeypatch):
 def test_has_patch_failure_message_contains_ticket_id(monkeypatch):
     monkeypatch.setattr(check_pr, "PATCH_POLL_TIMEOUT", 0)
     monkeypatch.setattr(check_pr, "PATCH_POLL_INTERVAL", 0)
-    csv_text = make_trac_csv(ticket_id="36969", has_patch="0")
+    csv_text = make_trac_csv(ticket_id="36991", has_patch="0")
     with patch("httpx.get", mock_httpx_get(csv_text)):
         with patch("time.sleep"):
             result = check_pr.check_trac_has_patch(VALID_PR_BODY)
-    assert "36969" in result
+    assert "36991" in result
 
 
 def test_has_patch_set_on_second_poll_passes(monkeypatch):
